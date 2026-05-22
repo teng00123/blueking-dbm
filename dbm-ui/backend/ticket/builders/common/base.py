@@ -688,6 +688,10 @@ class SurrealDBTicketFlowBuilderPatchMixin(BaseTicketFlowBuilderPatchMixin):
     pass
 
 
+class QdrantTicketFlowBuilderPatchMixin(BaseTicketFlowBuilderPatchMixin):
+    pass
+
+
 class SQLServerTicketFlowBuilderPatchMixin(BaseTicketFlowBuilderPatchMixin):
     pass
 

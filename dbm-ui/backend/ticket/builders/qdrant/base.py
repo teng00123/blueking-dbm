@@ -12,9 +12,9 @@ specific language governing permissions and limitations under the License.
 from backend.configuration.constants import DBType
 from backend.db_meta.enums import ClusterType
 from backend.ticket.builders import TicketFlowBuilder
-from backend.ticket.builders.common.base import SurrealDBTicketFlowBuilderPatchMixin
+from backend.ticket.builders.common.base import QdrantTicketFlowBuilderPatchMixin
 
 
-class BaseQdrantTicketFlowBuilder(SurrealDBTicketFlowBuilderPatchMixin, TicketFlowBuilder):
+class BaseQdrantTicketFlowBuilder(QdrantTicketFlowBuilderPatchMixin, TicketFlowBuilder):
     group = DBType.K8sQdrant.value
     cluster_types = [ClusterType.K8sQdrantHa.value]
