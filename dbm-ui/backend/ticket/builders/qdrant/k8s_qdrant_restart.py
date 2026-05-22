@@ -23,6 +23,7 @@ from backend.ticket.constants import TicketType
 
 class K8sQdrantRestartSerializer(TicketBaseValidateSerializerMixin, serializers.Serializer):
     cluster_id = serializers.IntegerField(help_text=_("集群ID"))
+    clusters = serializers.DictField(help_text=_("集群信息"), required=False, read_only=True)
 
 
 class K8sQdrantRestartFlowParamBuilder(builders.FlowParamBuilder):
