@@ -150,6 +150,12 @@ class KubernetesBaseListRetrieveResource(query.ListRetrieveResource, KubernetesB
             "namespace": query_params["namespace"],
             # "componentName": query_params["role"],
         }
+        # 反查 cluster_id，用于权限字段嵌入(viewsets.list_instances 的 id_field=lambda d: d["cluster_id"])
+        cluster_id = query_params.get("cluster_id")
+        if not cluster_id:
+            cluster = Cluster.objects.filter(bk_biz_id=bk_biz_id, name=query_params["cluster_name"]).only("id").first()
+            cluster_id = cluster.id if cluster else None
+            query_params["cluster_id"] = cluster_id
         # 如果未配置 instance_roles，则按一次不带 componentName 的请求处理
         roles = cls.instance_roles or [None]
         for role in roles:
