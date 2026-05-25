@@ -12,68 +12,219 @@
 -->
 
 <template>
-  <BkFormItem property="execute_sqls">
-    <template #labelAppend>
-      <span style="font-size: 12px; font-weight: normal; color: #8a8f99">
-        （{{ t('最终执行结果以脚本内容为准') }}）
-      </span>
-    </template>
-    <div class="sql-execute-manual-input">
+  <div class="sql-execute-file-manual-input">
+    <BkLoading :loading="isContentLoading">
       <Editor
-        v-model="content"
-        :message-list="[]"
+        v-if="isShow"
+        v-model="fileData.content"
+        :message-list="fileData.messageList"
         :title="t('脚本编辑器')"
-        @change="handleContentChange" />
-    </div>
-  </BkFormItem>
+        @change="handleEditorChange" />
+      <div
+        v-if="fileData.state === SqlFileModel.UNCHEKED"
+        class="footer-action">
+        <BkButton
+          v-bk-tooltips="{
+            content: t('请先输入内容'),
+            disabled: !grammarCheckDisabled,
+          }"
+          v-test="{ type: 'button', value: 'grammarCheck' }"
+          :disabled="grammarCheckDisabled"
+          size="small"
+          theme="primary"
+          @click="handleGrammarCheck">
+          <DbIcon type="right-shape" />
+          <span class="ml-4">{{ t('语法检测') }}</span>
+        </BkButton>
+      </div>
+      <template v-else>
+        <SyntaxSuccess
+          v-if="fileData.state === SqlFileModel.SUCCESS"
+          class="syntax-success" />
+        <SyntaxChecking
+          v-if="fileData.state === SqlFileModel.CHECKING"
+          class="syntax-checking" />
+        <SyntaxError
+          v-else-if="fileData.state === SqlFileModel.UPLOAD_FAIL"
+          class="syntax-error" />
+        <MessageList
+          v-else-if="
+            fileData.state === SqlFileModel.SUCCESS &&
+            fileData.messageList.filter((m: { type: string }) => m.type === 'error').length === 0 &&
+            fileData.messageList.filter((m: { type: string }) => m.type === 'warning').length === 0
+          "
+          :data="fileData.messageList"
+          model-value />
+      </template>
+    </BkLoading>
+  </div>
 </template>
+
 <script setup lang="ts">
+  import { onActivated, shallowRef } from 'vue';
   import { useI18n } from 'vue-i18n';
 
-  import type { Mongodb } from '@services/model/ticket/ticket';
+  import { useSqlImport } from '@stores';
 
-  import { useTicketDetail } from '@hooks';
-
-  import { TicketTypes } from '@common/const';
+  import SqlFileModel from '@views/db-manage/common/model/sql-file/SqlFile';
 
   import Editor from '../editor/Index.vue';
+  import MessageList from '../editor/MessageList.vue';
 
-  type Emits = (e: 'change', value: string) => void;
+  import SyntaxChecking from './components/SyntaxChecking.vue';
+  import SyntaxError from './components/SyntaxError.vue';
+  import SyntaxSuccess from './components/SyntaxSuccess.vue';
 
-  interface Exposes {
-    getValue: () => { content: string; name: string }[];
+  interface Props {
+    isShow: boolean;
   }
 
-  const emits = defineEmits<Emits>();
-
-  const { t } = useI18n();
-
-  useTicketDetail<Mongodb.ExecScriptApply>(TicketTypes.MONGODB_EXEC_SCRIPT_APPLY, {
-    onSuccess(ticketDetail) {
-      const { details } = ticketDetail;
-      content.value = details.scripts[0].content;
-      handleContentChange(content.value);
-    },
-  });
-
-  const content = ref('');
-
-  const handleContentChange = (value: string) => {
-    emits('change', value);
+  type Emits = {
+    (e: 'change', value: string[]): void;
+    (e: 'grammar-check', doCheck: boolean, result: boolean | string): void;
   };
 
-  defineExpose<Exposes>({
-    getValue: () => [
-      {
-        content: content.value,
-        name: '',
-      },
-    ],
+  interface Expose {
+    getFileData: () => Record<string, SqlFileModel>;
+    getValue: () => string[];
+    setInit: (cacheData: Record<string, SqlFileModel>) => void;
+    setStateToUncheck: () => void;
+  }
+
+  defineProps<Props>();
+  const emits = defineEmits<Emits>();
+
+  const modelValue = defineModel<string[]>({
+    default: () => [],
+  });
+
+  const { dbType: currentDbType, grammarCheckHandle } = useSqlImport();
+  const { t } = useI18n();
+
+  // 单文件模式：直接使用一个 SqlFileModel 实例
+  const fileData = ref(
+    new SqlFileModel({
+      content: '',
+      realFilePath: 'script.js',
+    }),
+  );
+
+  const isContentLoading = ref(false);
+  const styles = shallowRef({});
+
+  const grammarCheckDisabled = computed(() => {
+    return fileData.value.content.trim().length === 0;
+  });
+
+  const triggerChange = () => {
+    window.changeConfirm = true;
+    modelValue.value = [fileData.value.realFilePath || 'script.js'];
+    emits('change', modelValue.value);
+  };
+
+  const triggerGramarCheckChange = () => {
+    let doCheck = true;
+    let checkPass = true;
+    let totalErrorNum = 0;
+
+    const item = fileData.value;
+    if (!item.grammarCheck && item.content) {
+      doCheck = false;
+    }
+    if (item.state === SqlFileModel.CHECK_FAIL || item.state === SqlFileModel.UPLOAD_FAIL) {
+      checkPass = false;
+    }
+    if (item.messageList?.length) {
+      totalErrorNum += item.messageList.filter((msg) => msg.type === 'error').length;
+    }
+
+    if (!checkPass && totalErrorNum > 0) {
+      emits('grammar-check', doCheck, t('请先修复n个错误后再提交', { n: totalErrorNum }));
+    } else {
+      emits('grammar-check', doCheck, checkPass);
+    }
+  };
+
+  const handleGrammarCheck = () => {
+    const params = new FormData();
+
+    params.append('sql_content', fileData.value.content);
+    params.append('cluster_type', currentDbType);
+
+    fileData.value.grammarCheckStart();
+    grammarCheckHandle(params)
+      .then((data) => {
+        const [fileCheckResult] = Object.values(data);
+
+        if (!fileCheckResult) {
+          fileData.value.uploadFailed();
+          return Promise.reject();
+        }
+
+        if (fileCheckResult.isError) {
+          fileData.value.grammarCheckFailed(data);
+        } else {
+          fileData.value.grammarCheckSuccessed(data);
+        }
+      })
+      .catch(() => {
+        fileData.value.uploadFailed();
+        emits('grammar-check', true, false);
+      })
+      .finally(() => {
+        triggerGramarCheckChange();
+        triggerChange();
+      });
+  };
+
+  const handleEditorChange = () => {
+    fileData.value.reEdit();
+    triggerGramarCheckChange();
+  };
+
+  onActivated(() => {
+    triggerChange();
+    setTimeout(() => {
+      window.changeConfirm = false;
+    });
+  });
+
+  onMounted(() => {
+    const offsetTop = 250;
+    styles.value = {
+      height: `${window.innerHeight - offsetTop - 60}px`,
+      position: 'relative',
+    };
+  });
+
+  defineExpose<Expose>({
+    getFileData() {
+      return { 'script.js': fileData.value };
+    },
+    getValue() {
+      return [fileData.value.realFilePath];
+    },
+    setInit(cacheData: Record<string, SqlFileModel>) {
+      // 单文件模式：取第一个缓存数据
+      const keys = Object.keys(cacheData);
+      if (keys.length > 0) {
+        fileData.value = cacheData[keys[0]];
+      }
+      triggerChange();
+      emits('grammar-check', true, true);
+    },
+    setStateToUncheck() {
+      fileData.value.reEdit();
+      triggerGramarCheckChange();
+    },
   });
 </script>
+
 <style lang="less">
-  .sql-execute-manual-input {
+  .sql-execute-file-manual-input {
     position: relative;
+    height: 100%;
+    background: #1a1a1a;
 
     .footer-action {
       position: absolute;

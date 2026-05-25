@@ -15,7 +15,10 @@
   <BkFormItem
     :label="t('脚本来源')"
     required>
-    <BkRadioGroup v-model="importMode">
+    <BkRadioGroup
+      v-model="importMode"
+      class="mb-8"
+      @change="handleImportModeChange">
       <BkRadioButton
         label="manual"
         style="width: 140px">
@@ -27,13 +30,17 @@
         {{ t('脚本文件') }}
       </BkRadioButton>
     </BkRadioGroup>
+    <KeepAlive>
+      <Component
+        :is="renderCom"
+        ref="fileRef"
+        v-model="modelValue"
+        v-bind="attrs"
+        :is-show="isShow"
+        @change="handleContentChange"
+        @grammar-check="handleGrammarCheck" />
+    </KeepAlive>
   </BkFormItem>
-  <KeepAlive>
-    <Component
-      :is="renderCom"
-      ref="fileRef"
-      @change="handleContentChange" />
-  </KeepAlive>
 </template>
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n';
@@ -42,12 +49,17 @@
 
   import { useTicketDetail } from '@hooks';
 
-  import { TicketTypes } from '@common/const';
+  import { useSqlImport } from '@stores';
+
+  import { DBTypes, TicketTypes } from '@common/const';
+
+  import type SqlFile from '@views/db-manage/common/model/sql-file/SqlFile';
 
   import LocalFile from './local-file/Index.vue';
   import ManualInput from './manual-input/Index.vue';
 
-  interface Exposes {
+  interface Expose {
+    getFileData: () => Record<string, SqlFile>;
     getValue: () => {
       mode: string;
       scripts: {
@@ -55,48 +67,66 @@
         name: string;
       }[];
     };
+    setInit: (cacheData: Record<string, SqlFile>) => void;
   }
 
-  const modelValue = defineModel<string[]>();
-  const importMode = defineModel<string>('importMode', {
-    default: 'manual',
+  const modelValue = defineModel<string[]>({
+    default: () => [],
+  });
+  const importMode = defineModel<'manual' | 'file'>('importMode', {
+    required: true,
   });
 
   const { t } = useI18n();
-
-  useTicketDetail<Mongodb.ExecScriptApply>(TicketTypes.MONGODB_EXEC_SCRIPT_APPLY, {
-    onSuccess(ticketDetail) {
-      const { details } = ticketDetail;
-      importMode.value = details.mode;
-    },
-  });
-
-  const fileRef = useTemplateRef('fileRef');
 
   const comMap = {
     file: LocalFile,
     manual: ManualInput,
   };
 
-  const renderCom = computed(() => comMap[importMode.value as keyof typeof comMap]);
+  const attrs = useAttrs();
+  const { updateDbType, updateUploadFilePath } = useSqlImport();
 
+  updateDbType(DBTypes.SQLSERVER); // TODO DELETE
+
+  useTicketDetail<Mongodb.ExecScriptApply>(TicketTypes.MONGODB_EXEC_SCRIPT_APPLY, {
+    onSuccess(ticketDetail) {
+      updateUploadFilePath(ticketDetail.details.path);
+    },
+  });
+
+  const fileRef = ref<InstanceType<typeof LocalFile>>();
+  const isShow = ref(true);
+
+  const renderCom = computed(() => comMap[importMode.value]);
+
+  // 文件来源改变时需要重置文件列表和语法检测
+  const handleImportModeChange = () => {
+    modelValue.value = [];
+  };
+
+  // 内容变更处理
   const handleContentChange = (value: string[]) => {
     modelValue.value = value;
   };
 
-  defineExpose<Exposes>({
-    getValue: () => ({
-      mode: importMode.value,
-      scripts: fileRef.value!.getValue(),
-    }),
+  // 语法检测状态
+  const handleGrammarCheck = (_doCheck: boolean, _result: boolean | string) => {
+    // 保留语法检测状态，可后续扩展使用
+  };
+
+  defineExpose<Expose>({
+    getFileData() {
+      return fileRef.value!.getFileData();
+    },
+    getValue() {
+      return {
+        mode: importMode.value,
+        scripts: fileRef.value!.getValue(),
+      };
+    },
+    setInit(cacheData: Record<string, SqlFile>) {
+      fileRef.value!.setInit(cacheData);
+    },
   });
 </script>
-<style lang="less" scoped>
-  .label-tips {
-    position: absolute;
-    top: 0;
-    padding-left: 16px;
-    font-weight: normal;
-    color: @gray-color;
-  }
-</style>

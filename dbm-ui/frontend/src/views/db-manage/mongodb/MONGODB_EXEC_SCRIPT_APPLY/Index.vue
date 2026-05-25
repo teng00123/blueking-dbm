@@ -76,7 +76,7 @@
     cluster_ids: [],
     execute_db_infos: [],
     execute_sqls: [] as string[],
-    import_mode: 'manual',
+    import_mode: 'manual' as const,
     payload: createTickePayload(),
   });
 
@@ -101,10 +101,7 @@
   const { loading: isSubmitting, run: createTicketRun } = useCreateTicket<{
     cluster_ids: number[];
     mode: string;
-    scripts: {
-      content: string;
-      name: string;
-    }[];
+    script_files: string[];
   }>(TicketTypes.MONGODB_EXEC_SCRIPT_APPLY);
 
   const handleSubmit = async () => {
