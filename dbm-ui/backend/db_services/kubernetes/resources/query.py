@@ -155,7 +155,6 @@ class KubernetesBaseListRetrieveResource(query.ListRetrieveResource, KubernetesB
         if not cluster_id:
             cluster = Cluster.objects.filter(bk_biz_id=bk_biz_id, name=query_params["cluster_name"]).only("id").first()
             cluster_id = cluster.id if cluster else None
-            query_params["cluster_id"] = cluster_id
         # 如果未配置 instance_roles，则按一次不带 componentName 的请求处理
         roles = cls.instance_roles or [None]
         for role in roles:
@@ -163,7 +162,10 @@ class KubernetesBaseListRetrieveResource(query.ListRetrieveResource, KubernetesB
                 data["componentName"] = role
             res = KubernetesApi.component_pods(data, use_admin=True) or {}
             result["count"] += res.get("count", 0)
-            # 后端接口返回的实例列表字段为 result
+            pods = res.get("result") or []
+            # 给每条 pod 数据补充 cluster_id，供权限装饰器(id_field=lambda d: d["cluster_id"])使用
+            for pod in pods:
+                pod["cluster_id"] = cluster_id
             result["data"].extend(res.get("result") or [])
         return ResourceList(**result)
 
