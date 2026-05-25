@@ -150,12 +150,15 @@ class KubernetesBaseListRetrieveResource(query.ListRetrieveResource, KubernetesB
             "namespace": query_params["namespace"],
             # "componentName": query_params["role"],
         }
-        for role in cls.instance_roles:
-            data["componentName"] = role
-
-        res = KubernetesApi.component_pods(data, use_admin=True)
-        result["count"] += res.get("count", 0)
-        result["data"].extend(res.get("data", []))
+        # 如果未配置 instance_roles，则按一次不带 componentName 的请求处理
+        roles = cls.instance_roles or [None]
+        for role in roles:
+            if role is not None:
+                data["componentName"] = role
+            res = KubernetesApi.component_pods(data, use_admin=True) or {}
+            result["count"] += res.get("count", 0)
+            # 后端接口返回的实例列表字段为 result
+            result["data"].extend(res.get("result") or [])
         return ResourceList(**result)
 
     @classmethod
