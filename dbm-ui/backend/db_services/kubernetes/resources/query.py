@@ -100,14 +100,17 @@ class KubernetesBaseListRetrieveResource(query.ListRetrieveResource, KubernetesB
     ) -> Dict[str, Any]:
         """将集群对象转为可序列化的 dict 结构"""
 
-        cluster_detail = KubernetesApi.cluster_detail({"cluster_id": cluster.id}, use_admin=True)
-        k8s_cluster_name = cluster_detail.get("k8sClusterConfig", {}).get("clusterName", "")
-        namespace = cluster_detail.get("namespace", "")
+        # cluster_detail = KubernetesApi.cluster_detail({"cluster_id": cluster.id}, use_admin=True)
+        # k8s_cluster_name = cluster_detail.get("k8sClusterConfig", {}).get("clusterName", "")
+        # namespace = cluster_detail.get("namespace", "")
 
         cluster_extra_info = {
-            "k8s_cluster_name": k8s_cluster_name,
-            "namespace": namespace,
-            "components": cluster_detail.get("addonInfo", {}).get("topology", {}).get("components", []),
+            # "k8s_cluster_name": k8s_cluster_name,
+            # "namespace": namespace,
+            # "components": cluster_detail.get("addonInfo", {}).get("topology", {}).get("components", []),
+            "k8s_cluster_name": "BCS-K8S-41761",
+            "namespace": "demo",
+            "components": [{"name": "qdrant", "alias": "服务组件", "description": "核心组件"}],
         }
         cluster_info = super()._to_cluster_representation(
             cluster,
