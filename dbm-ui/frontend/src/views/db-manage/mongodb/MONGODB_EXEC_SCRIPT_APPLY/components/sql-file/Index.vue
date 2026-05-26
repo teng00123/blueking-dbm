@@ -14,7 +14,9 @@
 <template>
   <BkFormItem
     :label="t('脚本来源')"
-    required>
+    property="import_mode"
+    required
+    :rules="rules">
     <BkRadioGroup
       v-model="importMode"
       class="mb-8"
@@ -62,10 +64,7 @@
     getFileData: () => Record<string, SqlFile>;
     getValue: () => {
       mode: string;
-      scripts: {
-        content: string;
-        name: string;
-      }[];
+      script_files: string[];
     };
     setInit: (cacheData: Record<string, SqlFile>) => void;
   }
@@ -87,7 +86,7 @@
   const attrs = useAttrs();
   const { updateDbType, updateUploadFilePath } = useSqlImport();
 
-  updateDbType(DBTypes.SQLSERVER); // TODO DELETE
+  updateDbType(DBTypes.MONGODB);
 
   useTicketDetail<Mongodb.ExecScriptApply>(TicketTypes.MONGODB_EXEC_SCRIPT_APPLY, {
     onSuccess(ticketDetail) {
@@ -95,8 +94,25 @@
     },
   });
 
+  const rules = [
+    {
+      required: true,
+      validator() {
+        if (!hasGrammarCheck.value) {
+          return t('先执行语法检测');
+        }
+        if (!grammarCheckResult.value) {
+          return t('语法检测失败');
+        }
+        return true;
+      },
+    },
+  ];
+
   const fileRef = ref<InstanceType<typeof LocalFile>>();
   const isShow = ref(true);
+  const hasGrammarCheck = ref(false);
+  const grammarCheckResult = ref<boolean | string>(false);
 
   const renderCom = computed(() => comMap[importMode.value]);
 
@@ -111,8 +127,9 @@
   };
 
   // 语法检测状态
-  const handleGrammarCheck = (_doCheck: boolean, _result: boolean | string) => {
-    // 保留语法检测状态，可后续扩展使用
+  const handleGrammarCheck = (doCheck: boolean, checkResult: boolean | string) => {
+    hasGrammarCheck.value = doCheck;
+    grammarCheckResult.value = checkResult;
   };
 
   defineExpose<Expose>({
@@ -122,7 +139,7 @@
     getValue() {
       return {
         mode: importMode.value,
-        scripts: fileRef.value!.getValue(),
+        script_files: fileRef.value!.getValue(),
       };
     },
     setInit(cacheData: Record<string, SqlFile>) {

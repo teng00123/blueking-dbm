@@ -98,14 +98,16 @@
     default: () => [],
   });
 
-  const { dbType: currentDbType, grammarCheckHandle } = useSqlImport();
+  const FILE_NAME = 'script.js';
+
+  const { grammarCheckHandle } = useSqlImport();
   const { t } = useI18n();
 
   // 单文件模式：直接使用一个 SqlFileModel 实例
   const fileData = ref(
     new SqlFileModel({
       content: '',
-      realFilePath: 'script.js',
+      realFilePath: FILE_NAME,
     }),
   );
 
@@ -118,7 +120,7 @@
 
   const triggerChange = () => {
     window.changeConfirm = true;
-    modelValue.value = [fileData.value.realFilePath || 'script.js'];
+    modelValue.value = [fileData.value.realFilePath || 'FILE_NAME'];
     emits('change', modelValue.value);
   };
 
@@ -148,8 +150,7 @@
   const handleGrammarCheck = () => {
     const params = new FormData();
 
-    params.append('sql_content', fileData.value.content);
-    params.append('cluster_type', currentDbType);
+    params.append('script_content[0]', fileData.value.content);
 
     fileData.value.grammarCheckStart();
     grammarCheckHandle(params)
@@ -199,7 +200,7 @@
 
   defineExpose<Expose>({
     getFileData() {
-      return { 'script.js': fileData.value };
+      return { FILE_NAME: fileData.value };
     },
     getValue() {
       return [fileData.value.realFilePath];

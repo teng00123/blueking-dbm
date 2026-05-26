@@ -255,7 +255,7 @@
         //   });
         //   return;
         // }
-        params.append(`sql_files[${fileIndex}]`, curFile);
+        params.append(`script_files[${fileIndex}]`, curFile);
       } else {
         getFileContent(currentFileDataMap[curFile.name]).then((fileContent) => {
           Object.assign(currentFileDataMap[curFile.name], { content: fileContent });
@@ -278,19 +278,6 @@
       triggerChange();
       return;
     }
-
-    params.append('cluster_type', currentDbType);
-    // params.append(
-    //   'execute_objects',
-    //   JSON.stringify([
-    //     {
-    //       dbnames: [],
-    //       ignore_dbnames: [],
-    //       line_id: 1,
-    //       sql_files: ['/'],
-    //     },
-    //   ]),
-    // );
 
     grammarCheckHandle(params)
       .then((data) => {

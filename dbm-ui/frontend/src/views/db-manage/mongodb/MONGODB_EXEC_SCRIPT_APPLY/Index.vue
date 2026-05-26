@@ -82,11 +82,12 @@
 
   const { t } = useI18n();
 
-  const formRef = ref();
-  const sqlFileRef = ref();
-  const formData = reactive(createDefaultData());
+  const formRef = useTemplateRef('formRef');
+  const sqlFileRef = useTemplateRef('sqlFileRef');
 
   const resetFormKey = ref(0);
+
+  const formData = reactive(createDefaultData());
 
   const isAbleSubmit = computed(() => formData.cluster_ids.length > 0 && formData.execute_sqls.length > 0);
 
@@ -105,8 +106,8 @@
   }>(TicketTypes.MONGODB_EXEC_SCRIPT_APPLY);
 
   const handleSubmit = async () => {
-    await formRef.value.validate();
-    const executeInfo = sqlFileRef.value.getValue();
+    await formRef.value!.validate();
+    const executeInfo = sqlFileRef.value!.getValue();
 
     createTicketRun({
       details: {
