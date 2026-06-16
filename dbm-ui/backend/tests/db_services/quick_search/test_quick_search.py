@@ -43,7 +43,8 @@ QUICK_SEARCH_EXACT_PARAMS = {
 class TestQuickSearchViewSet:
     def _get_keyword(self, query, target_value):
         keyword = target_value
-        if query.get("filter_type") == "CONTAINS":
+        # 当关键字包含 ":" 时，按"键:值"精确匹配，不截断
+        if ":" not in target_value and query.get("filter_type") == "CONTAINS":
             keyword = target_value[: len(target_value) - 1]
         return keyword
 
