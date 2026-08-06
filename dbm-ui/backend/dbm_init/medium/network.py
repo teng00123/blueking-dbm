@@ -79,16 +79,30 @@ class HttpHandler:
                     url=url, headers=headers, verify=verify, cert=cert, timeout=timeout, cookies=cookies, **kwargs
                 )
             elif method == "POST":
-                resp = self.session.post(
-                    url=url,
-                    headers=headers,
-                    json=data,
-                    verify=verify,
-                    cert=cert,
-                    timeout=timeout,
-                    cookies=cookies,
-                    **kwargs,
-                )
+                if "files" in kwargs:
+                    headers = dict(headers) if headers else {}
+                    headers.pop("Content-Type", None)
+                    resp = self.session.post(
+                        url=url,
+                        headers=headers,
+                        data=data,
+                        verify=verify,
+                        cert=cert,
+                        timeout=timeout,
+                        cookies=cookies,
+                        **kwargs,
+                    )
+                else:
+                    resp = self.session.post(
+                        url=url,
+                        headers=headers,
+                        json=data,
+                        verify=verify,
+                        cert=cert,
+                        timeout=timeout,
+                        cookies=cookies,
+                        **kwargs,
+                    )
             elif method == "DELETE":
                 resp = self.session.delete(
                     url=url,

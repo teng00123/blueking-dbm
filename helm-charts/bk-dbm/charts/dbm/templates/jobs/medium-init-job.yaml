@@ -36,6 +36,7 @@ spec:
         {{- include "dbm.initMedium" (list . "riak") | nindent 8 }}
         {{- include "dbm.initMedium" (list . "sqlserver") | nindent 8 }}
         {{- include "dbm.initMedium" (list . "cloud") | nindent 8 }}
+        {{- include "dbm.initMedium" (list . "monitor") | nindent 8 }}
       volumes:
         - name: medium-install
           emptyDir: {}

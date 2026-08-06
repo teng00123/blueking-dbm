@@ -25,6 +25,12 @@ parser.add_argument(
     help="download: Download product library files;\n upload: Upload product library files\n sync: Sync library to DBM",
 )
 parser.add_argument("--db", type=str, help="Database type", default="")
+parser.add_argument(
+    "--sync-monitor",
+    action="store_true",
+    default=False,
+    help="upload 完成后是否同步监控采集插件(调用 sync_monitor_plugin)",
+)
 args = parser.parse_args()
 
 if __name__ == "__main__":
@@ -40,5 +46,7 @@ if __name__ == "__main__":
         MediumHandler().upload_medium(path=args.db, bkrepo_tmp_dir=path)
     elif args.type == "sync":
         MediumHandler().sync_from_bkrepo(db_type=args.db)
+    elif args.type == "sync_monitor":
+        MediumHandler().sync_monitor_plugin(args.sync_monitor)
     else:
         raise Exception("Unsupported operation type")
