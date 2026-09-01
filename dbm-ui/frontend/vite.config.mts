@@ -132,6 +132,11 @@ export default defineConfig(({ mode }) => {
       }),
       monacoEditorPlugin.default({
         languageWorkers: ['editorWorkerService', 'json', 'typescript'],
+        // base 含前导斜杠（如 /bkdbm/static/）时，插件默认的 path.join(outDir, base, publicPath)
+        // 会遇绝对路径段重置，把 monaco worker 输出到构建容器根目录（/bkdbm/static/monacoeditorwork），
+        // 导致 dist 内缺失该目录、后续 cp dist/* 后 mv ./static/static/monacoeditorwork 失败。
+        // 此处强制输出到 outDir/static/monacoeditorwork，与现有部署流程及运行时 URL 保持一致。
+        customDistPath: (root, buildOutDir) => resolve(root, buildOutDir, 'static', 'monacoeditorwork'),
       } as Parameters<typeof monacoEditorPlugin.default>[0]),
     ].concat(isHttps ? [basicSsl()] : []),
     optimizeDeps: {
