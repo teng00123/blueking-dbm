@@ -16,7 +16,7 @@ import time
 from datetime import timedelta
 from json import JSONDecodeError
 from operator import itemgetter
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from bamboo_engine.api import EngineAPIResult
 from bamboo_engine.eri import NodeType
@@ -268,40 +268,57 @@ class TaskFlowHandler:
         return node_ids
 
     @staticmethod
-    def bklog_esquery_search(indices, query_string, start_time, end_time, offset: int = 0, limit: int = 10000):
+    def bklog_esquery_search(
+        indices,
+        query_string,
+        start_time,
+        end_time,
+        offset: int = 0,
+        limit: int = 10000,
+        search_after: list = None,
+        sort_list: list = None,
+    ):
         """esquery搜索"""
-        resp = BKLogApi.esquery_search(
-            {
-                "indices": indices,
-                "start_time": start_time,
-                "end_time": end_time,
-                "query_string": query_string,
-                "start": offset,
-                "size": limit,
-            }
-        )
+        params = {
+            "indices": indices,
+            "start_time": start_time,
+            "end_time": end_time,
+            "query_string": query_string,
+            "start": offset,
+            "size": limit,
+        }
+        print(sort_list)
+        # search_after/sort_list 为空时不传，避免空值被日志平台当作有效查询条件
+        if search_after:
+            params["search_after"] = search_after
+        if sort_list:
+            params["sort_list"] = sort_list
+
+        resp = BKLogApi.esquery_search(params)
         return resp["hits"]["hits"]
 
-    def get_version_logs(
+    def _collect_version_logs(
         self,
         node_id: str,
         version_id: str,
         label_filters: list = None,
         offset: int = 0,
         limit: int = 10000,
-    ) -> List[Dict[str, Dict]]:
-        """获取节点的日志信息"""
+        search_after: list = None,
+        sort_list: list = None,
+    ) -> Tuple[List[Dict], Optional[List]]:
+        """查询节点日志，返回(日志列表, 下一次分页的search_after游标)"""
         if not FlowNode.objects.filter(root_id=self.root_id, node_id=node_id).count():
-            return [self.generate_log_record(message=_("节点尚未运行，请稍后查看"))]
+            return [self.generate_log_record(message=_("节点尚未运行，请稍后查看"))], None
 
         try:
             node_histories_map = {h["version"]: h for h in self.get_node_histories(node_id)}
             history = node_histories_map[version_id]
         except KeyError:
-            return [self.generate_log_record(message=_("无法找到当前版本{}的节点日志").format(version_id))]
+            return [self.generate_log_record(message=_("无法找到当前版本{}的节点日志").format(version_id))], None
 
         if history["finished_time"] < timezone.now() - timedelta(days=env.BKLOG_DEFAULT_RETENTION):
-            return [self.generate_log_record(message=_("节点日志仅保留{}天").format(env.BKLOG_DEFAULT_RETENTION))]
+            return [self.generate_log_record(message=_("节点日志仅保留{}天").format(env.BKLOG_DEFAULT_RETENTION))], None
 
         # 探测日志的pod名称
         detected_pods = ["schedule", "worker", "dbsimulation", "dbpriv"]
@@ -319,6 +336,8 @@ class TaskFlowHandler:
             end_time=end_time,
             offset=offset,
             limit=limit,
+            search_after=search_after,
+            sort_list=sort_list,
         )
         # 获取dbactuator采集日志
         dbm_dbactuator_query = f'"{self.root_id}" AND "{node_id}" AND {version_id}'
@@ -330,6 +349,8 @@ class TaskFlowHandler:
             end_time=end_time,
             offset=offset,
             limit=limit,
+            search_after=search_after,
+            sort_list=sort_list,
         )
         logger.info(_("BKLog DBACTUATOR 查询结果: {}").format(dbm_dbactuator_logs))
         # 格式化日志信息
@@ -342,6 +363,15 @@ class TaskFlowHandler:
                 int(x["_source"]["iterationIndex"]),
             ),
         )
+        # 以最后一条命中的排序字段作为下一次分页的游标
+        return_search_after = None
+        if sorted_hits:
+            last_source = sorted_hits[-1]["_source"]
+            return_search_after = [
+                last_source["dtEventTimeStamp"],
+                last_source["gseIndex"],
+                last_source["iterationIndex"],
+            ]
 
         for hit in sorted_hits:
             log = self._format_log(hit["_source"]["log"], hit["_source"]["serverIp"], hit["_index"])
@@ -354,8 +384,37 @@ class TaskFlowHandler:
                 )
             )
         if not logs and offset == 0:
-            return [self.generate_log_record(message=_("日志上报中，请稍后查看"))]
+            return [self.generate_log_record(message=_("日志上报中，请稍后查看"))], return_search_after
+        return logs, return_search_after
+
+    def get_version_logs(
+        self,
+        node_id: str,
+        version_id: str,
+        label_filters: list = None,
+        offset: int = 0,
+        limit: int = 10000,
+        search_after: list = None,
+    ) -> List[Dict[str, Dict]]:
+        """获取节点的日志信息"""
+        logs, __ = self._collect_version_logs(node_id, version_id, label_filters, offset, limit, search_after)
         return logs
+
+    def get_version_logs_with_search_after(
+        self,
+        node_id: str,
+        version_id: str,
+        label_filters: list = None,
+        offset: int = 0,
+        limit: int = 10000,
+        search_after: list = None,
+    ) -> Dict[str, Any]:
+        """获取节点日志及下一次分页游标，目前仅用于节点日志(游标)分页查询"""
+        sort_list = [["dtEventTimeStamp", "desc"], ["gseIndex", "desc"], ["iterationIndex", "desc"]]
+        logs, next_search_after = self._collect_version_logs(
+            node_id, version_id, label_filters, offset, limit, search_after, sort_list
+        )
+        return {"logs": logs, "search_after": next_search_after}
 
     def get_version_error_logs(self, node_id: str, version_id: str) -> List[Dict[str, Dict[str, str]]]:
         """获取指定节点版本的错误级别日志。

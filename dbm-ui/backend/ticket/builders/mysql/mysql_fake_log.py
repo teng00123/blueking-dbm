@@ -22,7 +22,7 @@ from backend.ticket.constants import TicketType
 
 class MySQLFakeLogParamsSerializer(serializers.Serializer):
     log_count = serializers.IntegerField(
-        help_text=_("单节点日志条数"), required=False, default=10, min_value=1, max_value=200
+        help_text=_("单节点日志条数"), required=False, default=10, min_value=1, max_value=20000
     )
     sleep_seconds = serializers.FloatField(
         help_text=_("每条日志间隔秒数"), required=False, default=0.1, min_value=0, max_value=5

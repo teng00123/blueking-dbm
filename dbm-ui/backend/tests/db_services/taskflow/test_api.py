@@ -13,6 +13,7 @@ import json
 import logging
 from datetime import timedelta
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from django.utils import timezone
@@ -101,10 +102,11 @@ class TestTaskflowApi:
         ]
 
         def esquery_side_effect(**kwargs):
-            # dbm_log采集日志按offset/limit分页返回，dbactuator采集日志此处不关注
-            if "dbm_log" in kwargs["indices"]:
-                return hits[kwargs["offset"] : kwargs["offset"] + kwargs["limit"]]
-            return []
+            if kwargs["search_after"] is not None:
+                start_index = hits.index(next(hit for hit in hits if hit["sort"] == kwargs["search_after"]))
+            else:
+                start_index = kwargs["offset"]
+            return hits[start_index : start_index + kwargs["limit"]]
 
         mock_esquery.side_effect = esquery_side_effect
 
@@ -116,8 +118,8 @@ class TestTaskflowApi:
         assert set(data.keys()) == {"has_data", "next", "previous", "results"}
         assert data["has_data"] is True
         assert len(data["results"]) == 1
-        # 有数据时返回下一页链接，无上一页
-        assert data["next"] is not None and "offset=1" in data["next"]
+        # 有数据时返回search_after游标，无上一页
+        assert data["next"] is not None and "search_after=" in data["next"]
         assert data["previous"] is None
 
         # offset超出总数时，results为空，不再返回next，而是返回回退上一页的previous
@@ -128,6 +130,52 @@ class TestTaskflowApi:
         assert data["has_data"] is False
         assert data["next"] is None
         assert data["previous"] is not None and "offset=99" in data["previous"]
+
+    @patch("backend.db_services.taskflow.handlers.TaskFlowHandler.get_node_histories")
+    @patch("backend.db_services.taskflow.handlers.TaskFlowHandler.bklog_esquery_search")
+    @patch.object(TaskFlowViewSet, "permission_classes")
+    @patch.object(TaskFlowViewSet, "get_permissions", lambda x: [])
+    def test_node_log_search_after(self, mocked_permission_classes, mock_esquery, mock_get_histories, init_taskflow):
+        """测试节点日志使用search_after cursor翻页"""
+        mocked_permission_classes.return_value = [AllowAny]
+        now = timezone.now()
+        mock_get_histories.return_value = [
+            {"version": self.version_id, "started_time": now - timedelta(hours=1), "finished_time": now}
+        ]
+        hits = [
+            self.generate_log_hit(now, gse_index=1, iteration_index=1, message="first log"),
+            self.generate_log_hit(now, gse_index=1, iteration_index=2, message="second log"),
+            self.generate_log_hit(now, gse_index=1, iteration_index=3, message="third log"),
+        ]
+
+        def esquery_side_effect(**kwargs):
+            if kwargs["search_after"] is not None:
+                start_index = hits.index(next(hit for hit in hits if hit["sort"] == kwargs["search_after"]))
+            else:
+                start_index = kwargs["offset"]
+            return hits[start_index : start_index + kwargs["limit"]]
+
+        mock_esquery.side_effect = esquery_side_effect
+        url = f"/apis/taskflow/{self.root_id}/node_log/"
+        data = client.get(url, data={"node_id": self.node_id, "version_id": self.version_id, "limit": 2}).data
+
+        assert mock_esquery.call_args.kwargs["start"] == 0
+        assert mock_esquery.call_args.kwargs["search_after"] == []
+        assert data["has_data"] is True
+        assert data["next"] is not None
+
+        cursor = parse_qs(urlparse(data["next"]).query)["search_after"][0]
+        data = client.get(
+            url,
+            data={"node_id": self.node_id, "version_id": self.version_id, "limit": 2, "search_after": cursor},
+        ).data
+
+        assert mock_esquery.call_args_list[1].kwargs["start"] == 0
+        assert mock_esquery.call_args_list[1].kwargs["search_after"] == json.loads(cursor)
+        assert [item["message"] for item in data["results"]] == ["third log"]
+        assert data["has_data"] is True
+        assert data["next"] is None
+        assert data["previous"] is None
 
     @staticmethod
     def generate_log_hit(timestamp, gse_index: int, iteration_index: int, message: str) -> dict:
@@ -141,4 +189,5 @@ class TestTaskflowApi:
                 "iterationIndex": iteration_index,
             },
             "_index": "test_index",
+            "sort": [int(timestamp.timestamp() * 1000), gse_index, iteration_index],
         }
