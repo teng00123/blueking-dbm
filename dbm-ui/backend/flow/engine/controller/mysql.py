@@ -37,6 +37,7 @@ from backend.flow.engine.bamboo.scene.mysql.mysql_clone_cluster_flow import MySQ
 from backend.flow.engine.bamboo.scene.mysql.mysql_data_migrate_flow import MysqlDataMigrateFlow
 from backend.flow.engine.bamboo.scene.mysql.mysql_db_table_backup import MySQLDBTableBackupFlow
 from backend.flow.engine.bamboo.scene.mysql.mysql_edit_config_flow import MysqlEditConfigFlow
+from backend.flow.engine.bamboo.scene.mysql.mysql_fake_log import MySQLFakeLogFlow
 from backend.flow.engine.bamboo.scene.mysql.mysql_fake_sql_semantic_check import MySQLFakeSemanticCheck
 from backend.flow.engine.bamboo.scene.mysql.mysql_flashback_flow import MysqlFlashbackFlow
 from backend.flow.engine.bamboo.scene.mysql.mysql_full_backup_flow import MySQLFullBackupFlow
@@ -403,6 +404,13 @@ class MySQLController(BaseController):
         """
         flow = MySQLFakeSemanticCheck(root_id=self.root_id, data=self.ticket_data)
         flow.fake_semantic_check()
+
+    def mysql_fake_log_scene(self):
+        """
+        测试专用，验证流程日志
+        """
+        flow = MySQLFakeLogFlow(root_id=self.root_id, data=self.ticket_data)
+        flow.fake_log_flow()
 
     @deprecated
     def mysql_ha_rename_database_scene(self):
