@@ -287,7 +287,6 @@ class TaskFlowHandler:
             "start": offset,
             "size": limit,
         }
-        print(sort_list)
         # search_after/sort_list 为空时不传，避免空值被日志平台当作有效查询条件
         if search_after:
             params["search_after"] = search_after
@@ -366,7 +365,7 @@ class TaskFlowHandler:
         # 以最后一条命中的排序字段作为下一次分页的游标
         return_search_after = None
         if sorted_hits:
-            last_source = sorted_hits[-1]["_source"]
+            last_source = sorted_hits[0]["_source"]
             return_search_after = [
                 last_source["dtEventTimeStamp"],
                 last_source["gseIndex"],
